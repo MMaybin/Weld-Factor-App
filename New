@@ -1,0 +1,81 @@
+import math
+import pandas as pd
+import streamlit as st
+
+# ---------------------------
+# Helper function
+# ---------------------------
+def calculate_weld_factor(D, t, g, V_NPS):
+    A_w = 0.577 * (t**2) + g * t         # weld cross-sectional area
+    V = math.pi * D * A_w                # weld volume
+    WF = V / V_NPS if V_NPS != 0 else 0  # weld factor
+    return V, WF
+
+# ---------------------------
+# Streamlit App
+# ---------------------------
+st.title("🔩 Weld Factor Calculator")
+
+st.markdown("""
+This calculator estimates the **weld volume** and **weld factor** 
+for either a single input or a batch of pipes from a CSV/Excel file.
+""")
+
+# Tabs: Single Calculation or Batch Upload
+tab1, tab2 = st.tabs(["➕ Single Calculation", "📂 Batch Upload"])
+
+# ---------------------------
+# Single Calculation
+# ---------------------------
+with tab1:
+    st.subheader("Single Pipe Calculation")
+
+    D = st.number_input("Pipe Outside Diameter (in)", value=12.75, format="%.4f")
+    t = st.number_input("Wall Thickness (in)", value=0.375, format="%.4f")
+    g = st.number_input("Root Opening (in)", value=0.0625, format="%.4f")
+    V_NPS = st.number_input("Reference Weld Volume (in³)", value=45.0, format="%.4f")
+
+    if st.button("Calculate Weld Factor", type="primary"):
+        V, WF = calculate_weld_factor(D, t, g, V_NPS)
+        st.metric("Calculated Weld Volume (in³)", f"{V:.2f}")
+        st.metric("Weld Factor", f"{WF:.3f}")
+
+# ---------------------------
+# Batch Upload
+# ---------------------------
+with tab2:
+    st.subheader("Batch Calculation from File")
+
+    st.markdown("""
+    Upload a **CSV or Excel file** with the following column names:
+    - `OD` (pipe outside diameter in inches)  
+    - `t` (wall thickness in inches)  
+    - `g` (root opening in inches)  
+    - `V_NPS` (reference weld volume in³)  
+    """)
+
+    uploaded_file = st.file_uploader("Upload file", type=["csv", "xlsx"])
+
+    if uploaded_file is not None:
+        # Read file
+        if uploaded_file.name.endswith(".csv"):
+            df = pd.read_csv(uploaded_file)
+        else:
+            df = pd.read_excel(uploaded_file)
+
+        # Ensure required columns exist
+        required_cols = {"OD", "t", "g", "V_NPS"}
+        if not required_cols.issubset(df.columns):
+            st.error(f"File must contain columns: {required_cols}")
+        else:
+            # Calculate results
+            df["Weld_Volume"], df["Weld_Factor"] = zip(*df.apply(
+                lambda row: calculate_weld_factor(row["OD"], row["t"], row["g"], row["V_NPS"]), axis=1
+            ))
+
+            st.success("✅ Calculations complete!")
+            st.dataframe(df)
+
+            # Download option
+            csv = df.to_csv(index=False).encode("utf-8")
+            st.download_button("Download Results as CSV", csv, "weld_factors.csv", "text/csv")
